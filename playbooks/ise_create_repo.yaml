@@ -1,0 +1,58 @@
+---
+- name: Patch ISE
+  gather_facts: false
+  hosts: ise33public
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  pre_tasks:
+
+    - name: Gather public IP from PPAN using `tag` as a filter
+      amazon.aws.ec2_instance_info:
+        filters:
+          "tag:role": "PPAN"
+      register: ppan
+
+    - name: Gather hostname from FTP using `tag` as a filter
+      amazon.aws.ec2_instance_info:
+        filters:
+          "tag:role": "FTP"
+      register: ftp
+
+  tasks:
+
+    - name: Create FTP Repository on ISE
+      cisco.ise.repository:
+        ise_hostname: "{{ ansible_host }}"
+        ise_username: "{{ ise_username }}"
+        ise_password: "{{ ise_password }}"
+        ise_verify: "{{ ise_verify }}"
+        state: present
+        enablePki: false
+        name: "{{ ftp.instances[0].tags.Name }}"
+        userName: "{{ repo_user }}"
+        password: "{{ repo_password }}"
+        path: /
+        protocol: FTP
+        serverName: "{{ ftp.instances[0].private_ip_address }}" # FQDN or IP Address
+      register: ise_repo
+
+  post_tasks:
+
+    - name: Repository was Created Successfully
+      when: 
+        - ise_repo is defined
+        - ise_repo.failed == false
+      ansible.builtin.pause:
+        seconds: 2
+        prompt: |
+          ┃  
+          ┃        .
+          ┃       /|\                                          Repository:  {{ ise_repo.ise_response.name }}
+          ┃   @  /|||\  @      ___                _        _   Protocol:    {{ ise_repo.ise_response.protocol }}
+          ┃  @  /|||||\  @    | _ \ ___  __ _  __| | _  _ | |  Server Name: {{ ise_repo.ise_response.serverName }}
+          ┃  @  \|/ \|/  @    |   // -_)/ _` |/ _` || || ||_|  Username:    {{ ise_repo.ise_response.userName }}
+          ┃   @.       .@     |_|_\\___|\__,_|\__,_| \_, |(_)
+          ┃    `Y@ @ @Y`                             |__/      Message:     {{ ise_repo.result }}
+          ┃  

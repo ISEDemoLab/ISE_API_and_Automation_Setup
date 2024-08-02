@@ -1,0 +1,106 @@
+---
+project_name: ISE_API_and_Automation_Setup
+owner: charlie
+ntp_server: time.nist.gov
+domain_name: iselabs.net
+dns_server: 208.67.222.222 # Cisco Umbrella
+timezone: America/New_York
+#
+#########################################################################################
+#
+# ISE
+# The `cisco.ise` Ansible collection can now use environment variables from version 2.5.8 and newer,
+# this section defines the environment variables for the playbooks.
+#
+ise_init_password: "{{ lookup('env','ISE_INIT_PASSWORD') }}"
+ise_username: "{{ lookup('env','ISE_REST_USERNAME') }}"
+ise_password: "{{ lookup('env','ISE_REST_PASSWORD') }}"
+ise_verify: "{{ lookup('env','ISE_VERIFY') | default(False, true) }}"
+ise_debug: "{{ lookup('env','ISE_DEBUG')  | default(False, true) }}"
+ise_ppan: iseadmin01.securitydemo.net
+ise_span: iseadmin02.securitydemo.net
+repo_user: iseftp
+repo_password: "{{ lookup('env','ISE_REST_PASSWORD') }}"
+license_token: "{{ lookup('env','ISE_LIC_TOKEN') }}"
+#
+# Backup and Restore variables
+#
+ise_repository_name: FTP
+ise_backup_encryption_key: ISEisC00L
+ise_backup_name_prefix: "iselabs" #  variable from date_time.yaml
+ise_restore_adeos: false
+urt_bundle_33: ise-urtbundle-3.3.0.430-1.0.0.SPA.x86_64.tar.gz
+upgrade_bundle: ise-upgradebundle-3.0.x-3.2.x-to-3.3.0.430.SPA.x86_64.tar.gz
+ise32p3: ise-patchbundle-3.2.0.542-Patch3-23071904.SPA.x86_64.tar.gz
+ise32p4: ise-patchbundle-3.2.0.542-Patch4-23101514.SPA.x86_64.tar.gz
+ise33p1: 
+#
+ise_node_size: small
+ise_version: ise33
+ise_nodes:
+  - name: "{{ project_name }}"
+    ami: "{{ ise_image[provider][ise_version][region] }}"  
+    instance_type: "{{ ise_instances[provider][ise_node_size] }}"
+ 
+#########################################################################################
+#
+# AWS Stuff
+#
+aws_region: "{{ lookup('env','AWS_REGION') | default('us-east-1') }}"
+aws_vpc_cidr: 192.168.104.0/23
+aws_vpc_public_subnet_cidr:  192.168.105.0/24
+aws_vpc_private_subnet_cidr: 192.168.104.0/24
+#
+ise32_cft: /home/charlie/Lab_Deployment/templates/bedef662-aba4-427e-b523-7c93cd50111c.c0e22086-6a23-4992-9a2a-980e732bf61f.template
+instance_type: c5.4xlarge # Small
+security_group: sg_vpc_default
+public_security_group: sg_public_default
+aws_ssh_key: "{{ lookup('env','AWS_SSH_KEY') | default('us-east-1') }}"
+ansible_ssh_user: ubuntu
+ansible_ssh_private_key_file: "{{ ssh_key_private_file }}"
+s3fs_bucket_name: s3forftp
+s3fs_mountpoint_dir: /files
+s3fs_permissions: "0777"
+s3fs_username: "{{ lookup('env','AWS_ACCESS_KEY_S3_ISE_REPO') }}"
+s3fs_password: "{{ lookup('env','AWS_SECRET_KEY_S3_ISE_REPO') }}"
+s3fs_password_file_contents: "{{ s3fs_username }}:{{ s3fs_password }}"
+s3fs_password_file: /etc/passwd-s3fs
+s3fs_options: "nonempty,rw,passwd_file=/etc/passwd-s3fs,use_cache=/tmp,_netdev,allow_other 0 0"
+#
+#########################################################################################
+#
+# Azure Stuff
+#
+az_region: westus
+az_resource_group: "00-chmoreto"
+az_vn_name: "isedemolab-vn"
+az_vn_cidr: 192.168.100.0/23
+az_vn_private_subnet_cidr: 192.168.100.0/24
+az_vn_gateway_subnet_cidr: 192.168.101.0/24
+az_security_group: "sg_chmoreto"
+az_private_subnet: "Production"
+local_nw_cidr: 10.1.100.0/24
+#
+#########################################################################################
+#
+# Meraki Stuff
+#
+meraki_org_id: "{{ lookup('env','MERAKI_ORG_ID') }}"
+meraki_org_name: "{{ lookup('env','MERAKI_ORG_NAME') }}"
+meraki_api_key: "{{ lookup('env','MERAKI_API_KEY') }}"
+meraki_public_ip: "{{ lookup('env','MERAKI_PUBLIC_IP') }}"
+meraki_vpn_secret: "{{ lookup('env','ISE_REST_PASSWORD') }}"
+#
+#########################################################################################
+#
+# SSH
+# The `ssh_key_local` role creates an SSH keypair using the
+# project name as the key name.  I'm using my existing keypair, to
+# use the generated key, uncomment the `ssh_key_private_file` below
+# comment out the one that is in use.
+#
+ssh_key_directory: ~/.ssh
+# ssh_key_name: "{{ project_name }}"
+# ssh_key_private_file: "{{ ssh_key_directory }}/{{ project_name }}"
+ssh_key_private_file: "{{ ssh_key_directory }}/id_rsa"
+ssh_key_public_file:  "{{ ssh_key_private_file }}.pub"

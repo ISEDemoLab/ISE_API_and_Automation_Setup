@@ -1,0 +1,149 @@
+---
+- name: Create a Configuration Backup
+  gather_facts: false
+  hosts: ise33public
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  pre_tasks:
+
+    - name: Gather hostname from PPAN using `tag` as a filter
+      amazon.aws.ec2_instance_info:
+        filters:
+          "tag:role": "PPAN"
+      register: ppan
+
+    # - name: Show PPAN info
+    #   ansible.builtin.debug:
+    #     var: ppan
+    #   ignore_errors: true  
+
+    - name: Assert Required Variables # These are all defined in ../vars/main.yaml
+      ansible.builtin.assert:
+        that:
+          - ise_repository_name is defined
+          - ise_repository_name != ''
+          - ise_backup_encryption_key is defined
+          - ise_backup_encryption_key != ''
+          - ise_backup_name_prefix is defined
+          - ise_backup_name_prefix != ''
+      register: assertions
+
+  tasks:
+
+    - name: ISE Configuration Backup Now
+      when: assertions.failed == false
+      block:
+        # 🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑
+        # Do Not Use the `cisco.ise.backup_config` module
+        # cisco.ise.backup_config 2.5.12 may exceed 60 seconds and throws a read timeout:
+        # 'Socket error HTTPSConnectionPool(host=''1.2.3.4'', port=443): Read timed out. (read timeout=60)'
+        # cisco.ise.backup_config does not support an extended timeout variable.
+        # Maybe if it is improved it can be used.
+        # 🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑🛑
+
+        - name: ISE Configuration Backup Now (⧖60s ➚300s) | {{ ise_backup_name_prefix }} ⮕ {{ ise_repository_name }})
+          delegate_to: localhost
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host }}/api/v1/backup-restore/config/backup"
+            method: POST
+            url_username: "{{ ise_username }}"
+            url_password: "{{ ise_password }}"
+            force_basic_auth: yes
+            force: true # do not get a cached copy
+            follow_redirects: safe
+            body_format: json
+            body: |
+              {
+                "repositoryName": "{{ ise_repository_name }}",
+                "backupEncryptionKey": "{{ ise_backup_encryption_key }}",
+                "backupName": "{{ ise_backup_name_prefix }}",
+              }
+            status_code: [
+                202, # Config DB backup task initiated
+                400, # Invalid Input: Invalid repository name, etc.
+                401, # Unauthorized
+                405, # A backup or restore is already in progress
+              ]
+            timeout: 300 # in seconds (10 minutes)
+            validate_certs: "{{ ise_verify }}"
+            return_content: true
+          register: ise_backup_config_info
+          failed_when: "ise_backup_config_info.status != 202"
+          ignore_errors: true # Errors do not stop execution
+
+        - name: ISE Configuration Backup Failed
+          when:
+            - ise_backup_config_info is defined
+            - ise_backup_config_info.status != 202
+          ansible.builtin.fail:
+            msg: |
+              '{{ ise_backup_name_prefix }}' @ {{ inventory_hostname }} ({{ ansible_host }}) ⮕ {{ ise_repository_name }}
+              {{ ise_backup_config_info }}
+
+        - name: ISE Backup Banner '{{ ise_backup_name_prefix }}' @ {{ inventory_hostname }} ({{ ansible_host }}) ⮕ {{ ise_repository_name }}
+          when:
+            - ise_backup_config_info is defined
+            - ise_backup_config_info.json.response.id is defined
+          ansible.builtin.pause:
+            seconds: 0
+            prompt: |
+              ▓▒░   
+              ▓▒░    ________   
+              ▓▒░     (    )    Node:    {{ inventory_hostname }} ({{ ansible_host }}) 
+              ▓▒░      \../     Repo:    {{ ise_repository_name }}
+              ▓▒░       )(      Started: {{ '%Y%m%dT%H%M%S-%Z' | strftime }}
+              ▓▒░      /  \     Task ID: {{ ise_backup_config_info.json.response.id }}
+              ▓▒░     (::::)    Text:    {{ ise_backup_config_info.json.response.message }}
+              ▓▒░    --------   
+              ▓▒░   
+              ▓▒░      ISE Backup Started - This will take at least 10 minutes!
+              ▓▒░   
+
+        - name: ISE Backup '{{ ise_backup_name_prefix }}' In Progress
+          cisco.ise.backup_last_status_info:
+            ise_hostname: "{{ ansible_host }}"
+            ise_username: "{{ ise_username }}"
+            ise_password: "{{ ise_password }}"
+          delay: 10 # seconds to wait between retries
+          retries: 360 # 360 * 10 seconds = 3600s == 1 hour
+          register: ise_backup_status
+          until: ise_backup_status.ise_response.status != 'IN_PROGRESS'
+          failed_when: ise_backup_status.ise_response.justComplete != 'yes'
+
+        - name: Show ISE Backup Status Failure
+          when:
+            - ise_backup_status is defined
+            - ise_backup_status.failed
+          ansible.builtin.debug:
+            var: ise_backup_status.ise_response
+          ignore_errors: true
+
+        # 💡 Set ise_*_filename as a convenience for other tasks
+        - name: Set `ise_backup_filename` and `ise_restore_filename`
+          when:
+            - ise_backup_status is defined
+            - ise_backup_status.failed == false
+            - ise_backup_status.ise_response is defined
+            - ise_backup_status.ise_response.message is defined
+          ansible.builtin.set_fact:
+            # message: 'backup ISEEE-CFG10-230723-1628.tar.gpg to repository ftp.trust0.net: success'
+            ise_backup_filename: "{{ ise_backup_status.ise_response.message.split(' ')[1] }}"
+            ise_restore_filename: "{{ ise_backup_status.ise_response.message.split(' ')[1] }}"
+          ignore_errors: true
+
+        - name: ISE Configuration Backup Status | {{ ise_backup_name_prefix }}
+          ansible.builtin.pause:
+            seconds: 10 # 💡 Pause and allow for the ISE Backup & Restore screen to update
+            prompt: |
+              ▓▒░   
+              ▓▒░          .           Node: {{ inventory_hostname }} ({{ ansible_host }})
+              ▓▒░         /|\          Repo: {{ ise_backup_status.ise_response.repository }}
+              ▓▒░     @  /|||\  @      Type: {{ ise_backup_status.ise_response.type }}
+              ▓▒░    @  /|||||\  @     Fail: {{ ise_backup_status.failed }}
+              ▓▒░    @  \|/ \|/  @     Text: {{ ise_backup_status.ise_response.message }}
+              ▓▒░     @.       .@      ise_backup_filename: {{ ise_backup_filename | default('None') }}
+              ▓▒░      `Y@ @ @Y`       ise_restore_filename: {{ ise_restore_filename | default('None') }}
+              ▓▒░                      
+          ignore_errors: true    

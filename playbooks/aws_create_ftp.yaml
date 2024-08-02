@@ -1,0 +1,109 @@
+---
+- name: Create an Ubuntu instance on AWS
+  gather_facts: false
+  hosts: localhost
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+    - ../vars/software.yaml
+    - ../vars/ise.yaml
+
+  pre_tasks:
+
+    - amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": 'Public Subnet'
+      register: subnet_info
+
+    # - name: Show Private IP info
+    #   ansible.builtin.debug:
+    #     var: subnet_info
+    #   ignore_errors: true
+
+  tasks:
+
+    - name: Create Ubuntu Server ⏳
+      amazon.aws.ec2_instance:
+        # state: present        # instances exist but not guarantee of state (e.g. running)
+        # state: running        # present + ensures the instances are running
+        state: started        # running + waits for EC2 status checks; ~3 minutes per node
+        # state: stopped        # ensures an existing instance is stopped.
+        # state: terminated     # ensures an existing instance is terminated.
+        name: "FTP"
+        region: "{{ aws_region }}"
+        key_name: "{{ ssh_key_private_file | basename }}.pub"
+        vpc_subnet_id: "{{ subnet_info.subnets[0].id }}"
+        image_id: "{{ ubuntu_images['aws']['us-east-1']['24.04'] }}"
+        instance_type: "{{ ise_instances['aws']['eval'] }}"
+        network:
+          assign_public_ip: true
+          private_ip_address: "192.168.105.21"
+          delete_on_termination: true
+        security_group: "{{ security_group }}" #  SG_Public # name or ID
+        volumes:
+          - device_name: /dev/sda1
+            ebs:
+              volume_size: "600"
+              delete_on_termination: true
+        wait: yes
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          role: "FTP"
+          os: "Ubuntu"
+          version: "24.04"
+        user_data: "hostname=ftp\nprimarynameserver=208.67.222.222\ndnsdomain={{ domain_name }}\nntpserver=time.nist.org\ntimezone={{ timezone | default('Etc/UTC') }}\nusername={{ ise_username }}\npassword={{ ise_password }}"
+      register: results
+
+    - name: Create AWS EC2 Route53 DNS Entries
+      amazon.aws.route53:
+        state: "{{ dns_state | default('present')}}"
+        zone: "{{ domain_name | lower }}"
+        record: "{{ results.instances[0].tags.Name | lower }}.{{ domain_name | lower }}"
+        value: "{{ results.instances[0].public_ip_address }}"
+        type: "{{ type | default('A') }}"
+        ttl: "{{ ttl  | default(600) }}"
+        overwrite: "{{ overwrite | default(true) }}"
+        wait: "{{ wait | default(false) }}"
+        # tags:  # Tags are not supported
+      ignore_errors: true
+      register: dns
+
+    # - amazon.aws.s3_bucket:
+    #     name: s3forftp
+    #     state: present
+    #     accelerate_enabled: true
+    #     tags:
+    #       project: "{{ project_name }}"
+    #       owner: "{{ owner }}"
+    #       started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+    #       role: "FTP"
+
+    - name: Show DNS info
+      ansible.builtin.debug:
+        var: dns
+      ignore_errors: true
+
+  post_tasks:
+
+    - name: Pause to allow DNS record to register to AWS Route53
+      ansible.builtin.pause:
+        seconds: 30
+        prompt: Pause to allow DNS record to register to AWS Route53
+
+    - name: Show how to access {{ dns.resource_records_sets[0].name[:-1] }}
+      ansible.builtin.pause:
+        seconds: 5
+        prompt: |
+           
+                   _
+               ,--(_)    {{ results.instances[0].tags.os }} {{ results.instances[0].tags.version }}
+             _/ ;-._\    is now available at
+            (_)(   ) )   Private IP: {{ results.instances[0].private_ip_address }}
+              \ ;-'_/    Public IP: {{ results.instances[0].public_ip_address }}
+               `--(_)    DNS Name: {{ dns.resource_records_sets[0].name[:-1] }}
+                         SSH using sshi {{ ansible_ssh_user | default('ubuntu') }}@{{ dns.resource_records_sets[0].name[:-1] }}
+           
+      ignore_errors: true

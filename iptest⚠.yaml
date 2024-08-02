@@ -1,0 +1,97 @@
+  ResourceRecordSets:
+  - Name: iselabs.net.
+    ResourceRecords:
+    - Value: ns-1341.awsdns-39.org.
+    - Value: ns-1625.awsdns-11.co.uk.
+    - Value: ns-83.awsdns-10.com.
+    - Value: ns-756.awsdns-30.net.
+    TTL: 172800
+    Type: NS
+  - Name: iselabs.net.
+    ResourceRecords:
+    - Value: ns-1341.awsdns-39.org. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400
+    TTL: 900
+    Type: SOA
+  - Name: ftp.iselabs.net.
+    ResourceRecords:
+    - Value: 3.94.80.132
+    TTL: 600
+    Type: A
+  - Name: ise33public.iselabs.net.
+    ResourceRecords:
+    - Value: 3.93.231.159
+    TTL: 600
+    Type: A
+  invocation:
+    module_args:
+      access_key: AKIAZI2LCGYJ745IKLKA
+      aws_ca_bundle: null
+      aws_config: null
+      change_id: null
+      debug_botocore_endpoint_logs: false
+      delegation_set_id: null
+      dns_name: null
+      endpoint_url: null
+      health_check_id: null
+      health_check_method: list
+      hosted_zone_id: Z09600573N98M3IA4WQI2
+      hosted_zone_method: list
+      max_items: null
+      next_marker: null
+      profile: null
+      query: record_sets
+      region: us-east-1
+      resource_id: null
+      secret_key: VALUE_SPECIFIED_IN_NO_LOG_PARAMETER
+      session_token: null
+      start_record_name: null
+      type: null
+      validate_certs: true
+  list:
+  - Name: iselabs.net.
+    ResourceRecords:
+    - Value: ns-1341.awsdns-39.org.
+    - Value: ns-1625.awsdns-11.co.uk.
+    - Value: ns-83.awsdns-10.com.
+    - Value: ns-756.awsdns-30.net.
+    TTL: 172800
+    Type: NS
+  - Name: iselabs.net.
+    ResourceRecords:
+    - Value: ns-1341.awsdns-39.org. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400
+    TTL: 900
+    Type: SOA
+  - Name: ftp.iselabs.net.
+    ResourceRecords:
+    - Value: 3.94.80.132
+    TTL: 600
+    Type: A
+  - Name: ise33public.iselabs.net.
+    ResourceRecords:
+    - Value: 3.93.231.159
+    TTL: 600
+    Type: A
+  resource_record_sets:
+  - name: iselabs.net.
+    resource_records:
+    - value: ns-1341.awsdns-39.org.
+    - value: ns-1625.awsdns-11.co.uk.
+    - value: ns-83.awsdns-10.com.
+    - value: ns-756.awsdns-30.net.
+    ttl: 172800
+    type: NS
+  - name: iselabs.net.
+    resource_records:
+    - value: ns-1341.awsdns-39.org. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400
+    ttl: 900
+    type: SOA
+  - name: ftp.iselabs.net.
+    resource_records:
+    - value: 3.94.80.132
+    ttl: 600
+    type: A
+  - name: ise33public.iselabs.net.
+    resource_records:
+    - value: 3.93.231.159
+    ttl: 600
+    type: Av

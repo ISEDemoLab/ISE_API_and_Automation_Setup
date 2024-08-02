@@ -1,0 +1,179 @@
+---
+- name: Install a patch on ISE
+  gather_facts: false
+  hosts: localhost
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+    - ../vars/ise.yaml
+
+  pre_tasks:
+
+    - name: Gather hostname from PPAN using `tag` as a filter
+      amazon.aws.ec2_instance_info:
+        filters:
+          "tag:role": "PPAN"
+      register: ppan
+ 
+    - name: Get Repository information
+      cisco.ise.repository_info:
+        ise_hostname: "{{ ppan.instances[0].tags.Name }}.{{ domain_name }}"
+        ise_username: "{{ise_username}}"
+        ise_password: "{{ise_password}}"
+        ise_verify: "{{ise_verify}}"
+      register: repo
+
+    # - name: Show Repository information
+    #   ansible.builtin.debug:
+    #     var: repo
+    #   ignore_errors: true
+
+    - name: Get all Repository Files
+      cisco.ise.repository_files_info:
+        ise_hostname: "{{ ppan.instances[0].tags.Name }}.{{ domain_name }}"
+        ise_username: "{{ise_username}}"
+        ise_password: "{{ise_password}}"
+        ise_verify: "{{ise_verify}}"
+        repositoryName: "{{ repo.ise_response[0].name }}"
+      register: repo_files
+
+    # - name: Show Repository information
+    #   ansible.builtin.debug:
+    #     var: repo_files
+    #   ignore_errors: true
+
+  tasks:
+
+    - name: Was this playbook run with the `--force` option?
+      when: force is defined
+      ansible.builtin.set_fact:
+        delete_confirmed: "{{ force | default(false) }}"
+
+    - name: Confirm Patch File Exists
+      when: force is undefined or force == false
+      ansible.builtin.pause:
+        prompt: |
+          ┃  
+          ┃     /\
+          ┃    /  \
+          ┃   / ❕ \   Is your patch listed in the repository? [y/n](yes)
+          ┃  /______\
+          ┃
+          ┃ Repository Files:
+          ┃"{{ repo_files.ise_response }}"
+      register: input
+
+    - name: Set Patch Existence
+      when: input.user_input is defined
+      ansible.builtin.set_fact:
+        delete_confirmed: "{{ (force is defined) or (input.user_input[0] | lower == 'y') }}"
+
+    # #-----------------------------------------------------------------------------
+    # # These tasks run when the response to the "Is your patch listed in the repository?"
+    # # is `n`.  The first task sends a message to the user and the second task 
+    # # ends the playbook.
+    # #-----------------------------------------------------------------------------
+    - name: Failed to Find the Patch in the Repository
+      when: "{{ (input.user_input[0] | lower == 'n') }}" # `block`s are used when multiple tasks meet the same `when` criteria
+      block:
+   
+      - name: Failed to Find the Patch in the Repository
+        # when: "{{ (input.user_input[0] | lower == 'n') }}" # <--- Note that the criteria would need to be in each task without
+        ansible.builtin.pause:                               #      being nested in a `block` 
+          prompt: |
+            ┃  
+            ┃     /\
+            ┃    /  \    Upload the Patch you want to install to your Repository and run this Playbook again
+            ┃   / ❕ \   Press ↵ Enter to Continue
+            ┃  /______\
+            ┃
+
+      - name: End the Play When the Patch is not in the Repository
+        ansible.builtin.meta: end_play
+        # when: "{{ (input.user_input[0] | lower == 'n') }}"
+
+    # #-----------------------------------------------------------------------------
+    # # These tasks run when the response to the "Is your patch listed in the repository?"
+    # # is `y` or the playbook is executed with the `--force` argument.  
+    # #-----------------------------------------------------------------------------
+    - name: Install 3.3 Patch 3 on {{ ppan.instances[0].tags.Name }}.{{ domain_name }}
+      when: delete_confirmed
+      ansible.builtin.uri:
+        url: "https://{{ ppan.instances[0].tags.Name }}.{{ domain_name }}/api/v1/patch/install"
+        method: POST
+        url_username: "{{ ise_username }}"
+        # url_password: "{{ ise_init_password }}"
+        url_password: "{{ ise_password }}"
+        force_basic_auth: yes
+        body: |
+          { 
+            "isDirectoryListed": "false",
+            "patchName": "{{ ise_patch_filenames['3.3.3'] }}",
+            "repositoryName": "{{ repo.ise_response[0].name }}"
+          }
+        status_code: [
+                      200,  # OK
+                      202,  # Patch installation triggered successfully
+                      400,  # Invalid input. A valid patch name and repository name should be provided as query parameters
+                      500,  # Internal server error
+                      ]
+        body_format: json
+        validate_certs: "{{ ise_verify }}"
+        return_content: true
+        timeout: 600 # in seconds (10 minutes)
+      register: response
+      failed_when: (response.status != 202) and (response.status != 500)
+    # #-----------------------------------------------------------------------------
+    # # Due to timeout issues, I had to use the API call to install the patch on
+    # # AWS nodes.  With this method, I am able to add the `timeout` value and
+    # # set it to a long enough time so that timeout errors are not received.
+    # #-----------------------------------------------------------------------------
+
+    - name: Patch Installation Initialized
+      ansible.builtin.debug:
+        msg: |
+                      EEE,,,EEE
+                ,E,,EEEEEEEEEEE,,E,
+                ]EEEE^       `]EEEE        Patch installation has been initiated
+              ,,EEE      ]EEE   ]EE,,      on {{ ppan.instances[0].tags.Name }}.{{ domain_name }}
+             ]EEEE        `EEE,  ]EEEE     
+               EEE  EE,    ,EEE   EEE      Patch Name:
+             ~EEEE  ]EEE,EEEEEE   *E       {{ ise_patch_filenames['3.3.3'] }}
+             ]E*EE,   ]EEEEEEEEEE,         
+                ]EEE,       *EEEEEE,       Be patient as the patch installs and the
+               ]EEEEEEEEEE,  *EEEEE        ISE nodes restart
+                     ]EE***`    `^`
+
+    - name: 🛑 Pause for 3 Minutes to Upload Patch and Start Installation 🛑
+      ansible.builtin.pause:
+        seconds: 180
+
+  post_tasks:
+
+    - name: Wait for ISE App Server to Come Up ∆ ∆ ∆
+      ansible.builtin.debug:
+        msg: |
+           
+           ________
+            (    )
+             \../
+              )(     Wait ~25 minutes for ISE AppServer to Come Up ∆ ∆ ∆
+             /  \    at {{ ppan.instances[0].tags.Name }}.{{ domain_name }}
+            (::::)
+           --------
+
+    - name: Wait for ⬇ Reboot⬆
+      delegate_to: localhost
+      vars:
+        wait_timeout: "{{ 30 * 60 }}" # 1800s == 30 minutes per port
+      with_items:
+        - 443 # SSH/REST/API Gateway
+        - 80 # Admin UI redirect to 443
+        - 22 # SSH
+      ansible.builtin.wait_for:
+        host: "{{ ppan.instances[0].tags.Name }}.{{ domain_name }}"
+        port: "{{ item }}"
+        state: stopped # Port is CLOSED
+        sleep: 3 # Default: 1. Seconds to sleep between checks. 💡 10 seconds is not fast enough to catch SSH???
+        timeout: "{{ wait_timeout }}" # Default: 300. Stop checking after <seconds>
+      ignore_errors: true

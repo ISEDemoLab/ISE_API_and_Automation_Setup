@@ -1,0 +1,40 @@
+---
+- name: Delete a ISE and Route53 entry from AWS
+  gather_facts: false
+  hosts: localhost
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  pre_tasks:
+
+    - name: Gather hostname from PPAN using `tag` as a filter
+      amazon.aws.ec2_instance_info:
+        filters:
+          "tag:role": "PPAN"
+      register: ppan
+
+    - name: Retrieve the details for new.foo.com
+      amazon.aws.route53:
+        state: get
+        zone: "{{ domain_name }}"
+        record: "{{ ppan.instances[0].tags.Name }}.{{ domain_name }}"
+        type: A
+      register: rec
+
+  tasks:
+
+    - name: Delete {{ ppan.instances[0].tags.Name }}.{{ domain_name }} A record using the results from the get command
+      amazon.aws.route53:
+        state: absent
+        zone: "{{ domain_name }}"
+        record: "{{ rec.set.record }}"
+        ttl: "{{ rec.set.ttl }}"
+        type: "{{ rec.set.type }}"
+        value: "{{ rec.set.value }}"
+
+    - name: Terminate every ISE instance
+      amazon.aws.ec2_instance:
+        state: absent
+        filters:
+          tag:Name: ise33public

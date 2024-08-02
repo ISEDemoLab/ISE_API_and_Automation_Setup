@@ -1,0 +1,49 @@
+---
+#------------------------------------------------------------------------------
+# To use the `azure_rm` dynamic inventory plugin, add this entry to the
+# ansible.cfg file's [defaults] section :
+#   [defaults]
+#   inventory=inventory
+# ⚠ This file must end with `azure_rm.y[a]ml`
+#
+# You may verify that it works with the command
+#   `ansible-inventory --graph [-i inventory/azure_rm.yaml]`
+#------------------------------------------------------------------------------
+plugin: azure.azcollection.azure_rm
+include_vm_resource_groups:
+  - "*"
+auth_source: auto
+plain_host_names: yes
+keyed_groups:
+  # - key: tags.owner | default('none')
+  #   prefix: owner
+  # - key: tags.project | default('none')
+  #   prefix: project
+  - key: tags.role | default('none')
+    prefix: role
+  # - key: location
+  #   # prefix: 
+  #   separator: ''
+  # - key: tags.roles
+  #   prefix: role
+  #   separator: "_"
+  # - key: tags.services
+  #   prefix: service
+  #   separator: "_"
+  # - key: image.offer
+  #   prefix: offer
+  #   separator: ""
+  # - key: image.sku
+  #   prefix: sku
+  #   separator: ""
+  # - key: tags.version
+  #   prefix: ISE
+  #   separator: "_"
+# conditional_groups:
+#   ISE_3.2: "'cisco-ise_3_2' in image.sku"
+#   ISE_3.3: "'cisco-ise_3_3' in image.sku"
+#   ISE_3.4: "'ise34beta' in ise34beta.name"
+#   Ubuntu: "'22_04-lts-gen2' in image.sku"
+#   windows: "'WindowsServer' in image.offer"
+#   load_balancer: "'nginxinc' in image.publisher"
+

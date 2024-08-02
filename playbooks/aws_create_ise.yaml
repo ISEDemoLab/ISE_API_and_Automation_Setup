@@ -1,0 +1,113 @@
+---
+- name: Create an ISE 3.3 instance on AWS
+  gather_facts: false
+  hosts: localhost
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+    - ../vars/ise.yaml
+
+  pre_tasks:
+
+    - amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": 'Public Subnet'
+      register: subnet_info
+
+    # - name: Show Subnet IP info
+    #   ansible.builtin.debug:
+    #     var: subnet_info
+    #   ignore_errors: true
+
+  tasks:
+
+    - name: Create ISE 3.3 ⏳
+      amazon.aws.ec2_instance:
+        # state: present        # instances exist but not guarantee of state (e.g. running)
+        # state: running        # present + ensures the instances are running
+        state: started        # running + waits for EC2 status checks; ~3 minutes per node
+        # state: stopped        # ensures an existing instance is stopped.
+        # state: terminated     # ensures an existing instance is terminated.
+        name: "ise33public"
+        region: "{{ aws_region }}"
+        key_name: "{{ ssh_key_private_file | basename }}.pub"
+        vpc_subnet_id: "{{ subnet_info.subnets[0].id }}"
+        image_id: "{{ ise_images['aws']['us-east-1']['3.3.0'] }}"
+        instance_type: "{{ ise_instances['aws']['small'] }}"
+        network:
+          assign_public_ip: true
+          private_ip_address: "192.168.105.110"
+          delete_on_termination: true
+        security_group: "{{ security_group }}" #  SG_Public # name or ID
+        volumes:
+          - device_name: /dev/sda1
+            ebs:
+              volume_size: "600"
+              delete_on_termination: true
+        wait: yes
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          role: "PPAN"
+          os: "ISE"
+          version: "3.3"
+        user_data: |
+          hostname=ise33public
+          primarynameserver={{ dns_server }}
+          dnsdomain={{ domain_name }}
+          ntpserver={{ ntp_server }}
+          timezone={{ timezone | default('Etc/UTC') }}
+          username={{ ise_username }}
+          password={{ ise_init_password }}
+          ersapi=yes
+          openapi=yes
+          pxGrid=no
+          pxgrid_cloud=no
+      register: results
+
+    - name: Create AWS Route53 DNS Entries
+      amazon.aws.route53:
+        state: "{{ dns_state | default('present')}}"
+        zone: "{{ domain_name | lower }}"
+        record: "{{ results.instances[0].tags.Name | lower }}.{{ domain_name | lower }}"
+        value: "{{ results.instances[0].public_ip_address }}"
+        type: "{{ type | default('A') }}"
+        ttl: "{{ ttl  | default(600) }}"
+        overwrite: "{{ overwrite | default(true) }}"
+        wait: "{{ wait | default(false) }}"
+        # tags:  # Tags are not supported
+      ignore_errors: true
+      register: dns
+
+  post_tasks:
+
+    - name: Wait for ISE App Server to Come Up ∆ ∆ ∆
+      ansible.builtin.debug:
+        msg: |
+           
+           ________
+            (    )
+             \../
+              )(     Wait ~25 minutes for ISE AppServer to Come Up ∆ ∆ ∆
+             /  \    on {{ results.instances[0].network_interfaces[0].association.public_ip }}
+            (::::)
+           --------
+
+    - name: ISE Login ⮕ | {{ results.instances[0].network_interfaces[0].association.public_ip }}
+      delegate_to: localhost
+      ansible.builtin.uri:
+        url: https://{{ results.instances[0].network_interfaces[0].association.public_ip }}/admin/login.jsp
+        method: GET
+        follow_redirects: safe
+        timeout: 3
+        validate_certs: no
+        return_content: no
+      register: result
+      until: result.status == 200
+      retries: 1000
+      delay: 10 # wait between checks
+
+    - name: Refresh inventory to ensure new instances are added ⟳
+      ansible.builtin.meta: refresh_inventory

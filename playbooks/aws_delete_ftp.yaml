@@ -1,0 +1,38 @@
+---
+- name: Delete a ISE and Route53 entry from AWS
+  gather_facts: false
+  hosts: localhost
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  tasks:
+
+    - name: Gather hostname from FTP using `tag` as a filter
+      amazon.aws.ec2_instance_info:
+        filters:
+          "tag:role": "FTP"
+      register: ftp
+
+    - name: Retrieve the Route53 details for {{ ftp.instances[0].tags.Name }}.{{ domain_name }}
+      amazon.aws.route53:
+        state: get
+        zone: "{{ domain_name }}"
+        record: "{{ ftp.instances[0].tags.Name }}.{{ domain_name }}"
+        type: A
+      register: rec
+
+    - name: Delete {{ ftp.instances[0].tags.Name }}.{{ domain_name }} A record using the results from the get command
+      amazon.aws.route53:
+        state: absent
+        zone: "{{ domain_name }}"
+        record: "{{ rec.set.record }}"
+        ttl: "{{ rec.set.ttl }}"
+        type: "{{ rec.set.type }}"
+        value: "{{ rec.set.value }}"
+
+    - name: Terminate every {{ ftp.instances[0].tags.role }} instance
+      amazon.aws.ec2_instance:
+        state: absent
+        filters:
+          tag:Name: "{{ ftp.instances[0].tags.Name }}"

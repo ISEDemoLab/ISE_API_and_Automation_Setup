@@ -1,0 +1,182 @@
+---
+- name: Create a new VPC on AWS
+  gather_facts: false
+  hosts: localhost
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  tasks:
+
+    - name: Create a new VPC
+      amazon.aws.ec2_vpc_net:
+        name: "{{ project_name }}"
+        cidr_block: "{{ aws_vpc_cidr }}"
+        region: "{{ aws_region }}"
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+      register: result
+
+    - amazon.aws.ec2_vpc_net_info:
+
+    # - name: Show VPC info
+    #   ansible.builtin.debug:
+    #     var: result
+    #   ignore_errors: true
+
+    - name: Create private subnet
+      amazon.aws.ec2_vpc_subnet:
+        state: present
+        vpc_id: "{{ result.vpc.id }}"
+        cidr: "{{ aws_vpc_private_subnet_cidr }}"
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          Name: Private Subnet
+
+    - name: Create public subnet
+      amazon.aws.ec2_vpc_subnet:
+        state: present
+        vpc_id: "{{ result.vpc.id }}"
+        cidr: "{{ aws_vpc_public_subnet_cidr }}"
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          Name: Public Subnet
+
+    - name: Create default security group
+      amazon.aws.ec2_security_group:
+        name: sg_vpc_default
+        description: default sg restricting public ip access
+        vpc_id: "{{ result.vpc.id }}"
+        rules:
+          - proto: tcp
+            ports: 443
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow https from all addresses
+          - proto: tcp
+            ports: 80
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow http from all addresses
+          - proto: tcp
+            ports: 22
+            cidr_ip: 172.220.243.205/32
+            rule_desc: allow ssh from home lab
+          - proto: tcp
+            ports: 20-21
+            cidr_ip: 172.220.243.205/32
+            rule_desc: allow ftp from home lab            
+          - proto: udp
+            ports: 0-65535
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow RADIUS traffic from all addresses
+          - proto: all
+            cidr_ip: 72.163.217.96/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 173.38.220.32/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 64.104.248.192/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 64.103.40.16/28
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 72.163.220.0/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 173.36.120.0/28
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 64.104.125.224/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 128.107.241.160/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 192.118.78.16/28
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 173.38.117.64/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 72.163.2.224/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 173.39.121.64/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 64.104.44.96/27
+            rule_desc: Cisco network
+          - proto: all
+            cidr_ip: 192.168.104.0/23
+            rule_desc: AWS VPC networks
+          - proto: all
+            cidr_ip: 192.168.10.0/24
+            rule_desc: Meraki VPN networks
+          - proto: icmp
+            icmp_type: 3
+            icmp_code: 1
+            cidr_ip: 
+              - 192.168.10.0/24
+              - 172.220.243.205/32
+            rule_desc: Meraki VPN networks
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          Name: "Restrictive-SG"
+
+    - name: Create Internet gateway
+      amazon.aws.ec2_vpc_igw:
+        vpc_id: "{{ result.vpc.id }}"
+        state: present
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          Name: igw_vpc_default
+      register: igw
+
+    - name: Create Internet gateway route table
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ result.vpc.id }}"
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          Name: Gateway route table
+        subnets:
+          - "{{ aws_vpc_public_subnet_cidr }}"
+          - "{{ aws_vpc_private_subnet_cidr }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ igw.gateway_id }}"
+          - dest: ::/0
+            gateway_id: "{{ igw.gateway_id }}"
+      register: gateway_route_table
+
+    - amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": 'Public Subnet'
+      register: subnet_info
+
+    - name: Create new nat gateway and allocate new Elastic IP
+      amazon.aws.ec2_vpc_nat_gateway:
+        state: present
+        subnet_id: "{{ subnet_info.subnets[0].id }}"
+        wait: true
+        region: "{{ aws_region }}"
+        tags:
+          Name: ngw-public-subnet
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+      register: ngw
+

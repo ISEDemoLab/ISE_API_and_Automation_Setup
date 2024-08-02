@@ -1,0 +1,57 @@
+---
+- name: Create a Weekly Configuration Backup Schedule
+  gather_facts: false
+  hosts: ise33public
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  pre_tasks:
+
+    - name: Assert Required Variables  # These are all defined in ../vars/main.yaml
+      ansible.builtin.assert:
+        that:
+          - ise_repository_name is defined
+          - ise_repository_name != ''
+          - ise_backup_encryption_key is defined
+          - ise_backup_encryption_key != ''
+          - ise_backup_name_prefix is defined
+          - ise_backup_name_prefix != ''
+      register: assertions
+
+  tasks:
+
+    - name: Create
+      cisco.ise.backup_schedule_config:
+        ise_hostname: "{{ ansible_host }}"
+        ise_username: "{{ise_username}}"
+        ise_password: "{{ise_password}}"
+        ise_verify: "{{ise_verify}}"
+        repositoryName: "{{ ise_repository_name }}"
+        backupDescription: Weekly Config Backup
+        backupEncryptionKey: "{{ ise_backup_encryption_key }}"
+        backupName: "{{ ise_backup_name_prefix }}"
+        startDate: 08/02/2024
+        endDate: 08/02/2034
+        frequency: WEEKLY
+        weekDay: FRI
+        time: 11:00 PM
+        status: ENABLE
+      register: schedule
+
+  post_tasks:
+
+    - name: ISE Configuration Backup Schedule Status | {{ ise_backup_name_prefix }}
+      ansible.builtin.pause:
+        seconds: 10 # 💡 Pause and allow for the ISE Backup & Restore screen to update
+        prompt: |
+          ▓▒░   
+          ▓▒░          .          
+          ▓▒░         /|\         
+          ▓▒░     @  /|||\  @     
+          ▓▒░    @  /|||||\  @    {{ schedule.ise_response.response.message }}
+          ▓▒░    @  \|/ \|/  @    
+          ▓▒░     @.       .@     
+          ▓▒░      `Y@ @ @Y`      
+          ▓▒░                      
+      ignore_errors: true    

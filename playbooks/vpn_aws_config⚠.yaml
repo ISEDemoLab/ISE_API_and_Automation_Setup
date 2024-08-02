@@ -1,0 +1,90 @@
+---
+- name: Create Local Connection to AWS VPN
+  gather_facts: false
+  hosts: localhost
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  tasks:
+
+    - amazon.aws.ec2_vpc_net_info:
+      register: vpc
+
+    # - name: Show VPC info
+    #   ansible.builtin.debug:
+    #     var: vpc
+    #   ignore_errors: true
+
+    - name: Create a new VGW attached to a specific VPC
+      community.aws.ec2_vpc_vgw:
+        state: present
+        region: "{{ aws_region }}"
+        vpc_id: "{{ vpc.vpcs[0].id }}"
+        name: vgw4vpn
+        type: ipsec.1
+        validate_certs: false
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          role: "VPN"
+      register: created_vgw
+
+    - name: Create Customer Gateway
+      community.aws.ec2_customer_gateway:
+        bgp_asn: 65000
+        ip_address: "{{ meraki_public_ip }}"
+        name: Meraki MX95
+        region: "{{ aws_region }}"
+        # tags:  # Customer Gateways do not support tags
+        #   project: "{{ project_name }}"
+        #   owner: "{{ owner }}"
+        #   started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+        #   role: "VPN"
+      register: cgw
+
+    - name: Create a VPN connection
+      community.aws.ec2_vpc_vpn:
+        state: present
+        vpn_gateway_id: "{{ created_vgw.vgw.id }}"
+        customer_gateway_id: "{{ cgw.gateway.customer_gateway.customer_gateway_id }}"
+        routes:
+          - 192.168.10.0/24
+          - 192.168.11.0/24
+        # local_ipv4_network_cidr: 192.168.10.0/24
+        # remote_ipv4_network_cidr: 192.168.104.0/24
+        validate_certs: false
+        tunnel_options:
+          - PreSharedKey: "{{ meraki_vpn_secret }}"
+        tags:
+          project: "{{ project_name }}"
+          owner: "{{ owner }}"
+          started: "{{ '%Y-%m-%d T%H:%M:%S-%Z' | strftime }}"
+          role: "VPN"
+      register: vpn
+
+    - name: VPN tunnel is complete! 🎉
+      ansible.builtin.debug:
+        msg: |
+                       _______ 
+                      /       /
+             ___     /   ____/   
+             \   \  /   /\        
+              \   \/___/  \   Your AWS VPN configuration is complete
+               \       \   \  The IP address to connect to is 
+                \_______\   \ Tunnel 1: {{ vpn.options.tunnel_options[0].outside_ip_address }}
+                        /   / Tunnel 2: {{ vpn.options.tunnel_options[1].outside_ip_address }}
+                       /   /        
+                       \  /        
+                        \/
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,279 @@
+---
+- name: Update server and install FTP services
+  gather_facts: false
+  hosts: FTP
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+    - ../vars/software.yaml
+    - ../vars/ise.yaml
+
+  pre_tasks:
+
+    - name: apt Update and Upgrade Packages
+      # become: true
+      ansible.builtin.apt:
+        cache_valid_time: "{{ cache_valid_time | default(86400) }}" # 86400s == 1 day
+        update_cache: yes
+        upgrade: yes
+        # name: "*"
+        # state: latest
+
+    - name: Install Required Software Packages
+      become: true
+      ansible.builtin.apt:
+        state: latest
+        name: vsftpd
+    #
+    # vsftpd is the Very Secure File Transfer Protocol Daemon
+    #
+
+  tasks:
+
+    - name: Set VSFTPD Configuration Variables
+      ansible.builtin.set_fact:
+        vsftpd_cfg_file: /etc/vsftpd.conf
+        # vsftpd_sync_dir: files/vsftpd/files
+        vsftpd_root_dir: /files
+
+    - name: Create Group "cisco"
+      become: true
+      ansible.builtin.group:
+        state: present
+        name: cisco
+        # gid: 1000
+        system: no # group is a system group or not
+      register: results
+
+    # ⚠ Requires Python passlib module on localhost for `password_hash()`
+    # macOS: `brew install passlib`
+    # Ubuntu/Debian: `sudo apt install passlib`
+    - name: Add New User
+      become: true
+      ansible.builtin.user:
+        state: present
+        name: "{{ repo_user }}"
+        password: "{{ repo_password | password_hash('sha512') }}"
+        group: users # Primary user group ID
+        groups: users,ubuntu,cisco # List of groups
+        append: yes # append the user to groups
+        shell: /bin/bash
+      register: results
+
+    - name: Backup the original vsftpd.conf
+      ansible.builtin.copy:
+        src: /etc/vsftpd.conf
+        dest: /etc/vsftpd.conf.bkp
+        remote_src: yes
+        backup: yes
+
+    - name: Copy Custom vsftpd Configuration
+      ansible.builtin.copy:
+        dest: /etc/vsftpd.conf
+        group: root
+        owner: root
+        mode: "0644"
+        content: |
+          #
+          # For VSFTPd Configuration, see https://help.ubuntu.com/community/vsftpd
+          # The default configuration file: /etc/vsftpd.conf
+          # The default Log file: /var/log/vsftpd.log
+          #
+          # Read the vsftpd.conf.5 manual page to get a full idea of vsftpd's capabilities.
+          # It is an error to put any space between the option, = and value
+          #
+
+          listen=YES
+          # listen_ipv6=YES
+
+          # Allow anonymous FTP? (Disabled by default).
+          anonymous_enable=NO
+
+          # Uncomment this to allow local users to log in.
+          local_enable=YES
+
+          # A directory which vsftpd will try to change into after a local (i.e. non-anonymous) login. 
+          local_root=/files
+
+          # Uncomment this to enable any form of FTP write command.
+          write_enable=YES
+
+          pasv_enable=YES
+          pasv_min_port=1024
+          pasv_max_port=1048
+
+          # Default umask for local users is 077. You may wish to change this to 022,
+          # if your users expect that (022 is used by most other ftpd's)
+          local_umask=022
+
+          # Activate directory messages - messages given to remote users when they
+          # go into a certain directory.
+          dirmessage_enable=YES
+
+          # display directory listings with the time in your local time zone. Default is GMT
+          use_localtime=YES
+
+          # all FTP requests and responses are logged, providing the option xferlog_std_format is not enabled
+          log_ftp_protocol=YES
+
+          # Activate logging of uploads/downloads.
+          xferlog_enable=YES
+
+          # Make sure PORT transfer connections originate from port 20 (ftp-data).
+          connect_from_port_20=YES
+
+          # If you want, you can arrange for uploaded anonymous files to be owned by
+          # a different user. Note! Using "root" for uploaded files is not
+          # recommended!
+          #chown_uploads=YES
+          #chown_username=whoever
+
+          # You may override where the log file goes if you like. The default is shown below.
+          xferlog_file=/var/log/vsftpd.log
+
+          # log file in standard ftpd xferlog format and the default log file location is /var/log/xferlog in this case.
+          xferlog_std_format=YES
+
+          # You may change the default value (600) for timing out an idle session.
+          idle_session_timeout=300
+
+          # You may change the default value for timing out a data connection.
+          data_connection_timeout=120
+
+          # It is recommended that you define on your system a unique user which the
+          # ftp server can use as a totally isolated and unprivileged user.
+          #nopriv_user=ftpsecure
+
+          # You may fully customise the login banner string:
+          ftpd_banner=Welcome to the ISE Repository!
+
+          # You may restrict local users to their home directories.  See the FAQ for
+          # the possible risks in this before using chroot_local_user or
+          # chroot_list_enable below.
+          # chroot_local_user=YES
+
+          # You may specify an explicit list of local users to chroot() to their home
+          # directory. If chroot_local_user is YES, then this list becomes a list of
+          # users to NOT chroot().
+          # (Warning! chroot'ing can be very dangerous. If using chroot, make sure that
+          # the user does not have write access to the top level directory within the
+          # chroot)
+          #chroot_local_user=YES
+          #chroot_list_enable=YES
+          # (default follows)
+          #chroot_list_file=/etc/vsftpd.chroot_list
+
+          # The name of a a secure chroot() jail directory which is empty.  The directory should not be writable by the ftp user.
+          secure_chroot_dir=/var/run/vsftpd/empty
+
+          # Uncomment this to indicate that vsftpd use a utf8 filesystem.
+          #utf8_filesystem=YES
+
+
+          # Hide the info about the owner (user and group) of the files.
+          hide_ids=YES
+
+          # Connection limit for each IP:
+          max_per_ip=6
+
+          # Maximum number of clients:
+          max_clients=20
+
+          # Show hidden files and the "." and ".." folders.
+          # force_dot_files=YES
+
+          #------------------------------------------------------------------------------
+          # TLS/SSL/FTPS
+          #------------------------------------------------------------------------------
+          # We need to specify the location of our certificate
+          # and key files. We actually combined both pieces of
+          # information into a single file, so we will point
+          # both options to the same file:
+          # rsa_cert_file=/etc/ssl/private/vsftpd.pem
+          # rsa_private_key_file=/etc/ssl/private/vsftpd.pem
+
+          # Next, we need enable the use of these files and
+          # disable anonymous users. We should also force the
+          # use of SSL for both data transfer and login
+          # routines. This will make the security mandatory:
+
+          # ssl_enable=YES
+          # allow_anon_ssl=NO
+          # force_local_data_ssl=YES
+          # force_local_logins_ssl=YES
+
+          # Next, we will restrict the type of connection to
+          # TLS, which is more secure than SSL. We will do this
+          # by explicitly allowing TLS and denying the use of SSL:
+          # ssl_tlsv1=YES
+          # ssl_sslv2=NO
+          # ssl_sslv3=NO
+
+          # We'll add a few more configuration options before finishing:
+          # require_ssl_reuse=NO
+          # ssl_ciphers=HIGH
+
+          # external ip here
+          # if you are in a private network and expect to be visited by the outside
+          #pasv_address=127.0.0.1
+          #pasv_addr_resolve=NO
+          #------------------------------------------------------------------------------
+
+
+
+          # This option specifies the location of the RSA certificate to use for SSL
+          # encrypted connections.
+          #rsa_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+          #rsa_private_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+          #ssl_enable=NO
+
+          # To use vsftpd with encryption (it's safer), change or add the following options (some options aren't on the original config file, so add them): Code: ssl_enable=YES
+          # allow_anon_ssl=NO
+          # force_local_data_ssl=YES
+          # force_local_logins_ssl=YES
+          # ssl_tlsv1=YES
+          # ssl_sslv2=NO
+          # ssl_sslv3=NO
+          # # Filezilla uses port 21 if you don't set any port
+          # # in Servertype "FTPES - FTP over explicit TLS/SSL"
+          # # Port 990 is the default used for FTPS protocol.
+          # # Uncomment it if you want/have to use port 990.
+          # # listen_port=990
+          # No need to create a certificate if openssl package is installed!
+      register:
+        results
+
+    - name: Restart vsftpd (systemd)
+      ansible.builtin.systemd:
+        name: vsftpd
+        state: started
+        enabled: yes
+      register: results
+
+    - name: Restart vsftpd (service)
+      become: true
+      ansible.builtin.service:
+        name: vsftpd
+        state: restarted
+      register: results
+
+    - name: Copy the ISE patch to FTP
+      ansible.builtin.copy:
+        src: "~/Downloads/{{ ise_patch_filenames['3.3.3'] }}"
+        dest: "/srv/ftp/{{ ise_patch_filenames['3.3.3'] }}"
+        remote_src: no
+        backup: no
+
+    - name: Notification | FTP Ready 
+      ansible.builtin.pause:
+        seconds: 0
+        # 💡 Ansible trims whitespace - use a Unicode em space [] to start each line
+        prompt: |
+                     _
+                 ,--(_)     ___ _____ ___    ___             _      _ 
+               _/ ;-._\    | __|_   _| _ \  | _ \___ __ _ __| |_  _| |
+              (_)(   ) )   | _|  | | |  _/  |   / -_) _` / _` | || |_|
+                \ ;-'_/    |_|   |_| |_|    |_|_\___\__,_\__,_|\_, (_)
+                 `--(_)                                        |__/   
+           
+      ignore_errors: true
