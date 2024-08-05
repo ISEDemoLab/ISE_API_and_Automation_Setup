@@ -1,0 +1,121 @@
+POST (Create) Network Device
+
+
+curl --include --insecure --location \
+--header 'Content-Type:application/json' \
+--header 'Accept: application/json' \
+--user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
+--request POST https://ise33public.iselabs.net/ers/config/networkdevice \
+--data '
+{
+  "NetworkDevice": {
+    "name": "Test_Device",
+    "description": "I created this device with cURL!",
+    "authenticationSettings": {
+      "radiusSharedSecret": "Temp1234",
+      "enableKeyWrap": false,
+      "dtlsRequired": false,
+      "keyEncryptionKey": "",
+      "messageAuthenticatorCodeKey": "",
+      "keyInputFormat": "ASCII",
+      "enableMultiSecret": "false"
+    },
+    "profileName": "Cisco",
+    "NetworkDeviceIPList": [
+      {
+        "ipaddress": "5.5.5.5",
+        "mask": 32
+      }
+    ],
+    "NetworkDeviceGroupList": [
+      "Location#All Locations",
+      "Device Type#All Device Types"
+    ]
+  }
+}'
+
+
+------------------------------------------------------------------------------------------------
+GET Network Device
+
+
+curl --include --insecure --location \
+--header 'Accept: application/json' \
+--user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
+--request GET https://ise33public.iselabs.net/ers/config/networkdevice
+
+------------------------------------------------------------------------------------------------
+GET Specific Network Device
+
+
+curl  --include  --insecure  --location \
+--header 'Accept: application/json' \
+--user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
+--request GET https://ise33public.iselabs.net/ers/config/networkdevice/<<device_id>>
+
+------------------------------------------------------------------------------------------------
+PUT (Update) Network Device Name and Password
+
+
+curl --include --insecure --location \
+--header 'Content-Type:application/json' \
+--header 'Accept: application/json' \
+--user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
+--request PUT <<device_id>> \
+--data '
+{
+  "NetworkDevice": {
+    "name": "PUT_Device",
+    "description": "I just updated this device with cURL!",
+    "authenticationSettings": {
+      "radiusSharedSecret": "p@55w0rd",
+      "enableKeyWrap": false,
+      "dtlsRequired": false,
+      "keyEncryptionKey": "",
+      "messageAuthenticatorCodeKey": "",
+      "keyInputFormat": "ASCII",
+      "enableMultiSecret": "false"
+    },
+    "profileName": "Cisco",
+    "NetworkDeviceIPList": [
+      {
+        "ipaddress": "5.5.5.5",
+        "mask": 32
+      }
+    ],
+    "NetworkDeviceGroupList": [
+      "Location#All Locations",
+      "Device Type#All Device Types"
+    ]
+  }
+}'
+
+------------------------------------------------------------------------------------------------
+PATCH (Update) Network Device Name, Description, and Password
+
+
+curl  --include  --insecure  --location \
+--header 'Content-Type:application/json' \
+--header 'Accept: application/json' \
+--user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
+--request PATCH https://ise33public.iselabs.neters/config/networkdevice/<<device_id>> \
+--data '
+{
+  "NetworkDevice" : {
+    "name" : "PATCH_Test",
+	"description" : "Updated with the new PATCH request",
+    "authenticationSettings" : {
+      "radiusSharedSecret" : "ISEisC00L!"
+    }
+        }
+}'
+
+------------------------------------------------------------------------------------------------
+DELETE Netwrok Device
+
+
+curl  --include  --insecure  --location \
+--header 'Content-Type:application/json' \
+--header 'Accept: application/json' \
+--user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
+--request DELETE https://ise33public.iselabs.net/ers/config/networkdevice/<<device_id>>

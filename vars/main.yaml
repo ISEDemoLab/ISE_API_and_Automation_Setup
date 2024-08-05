@@ -17,8 +17,7 @@ ise_username: "{{ lookup('env','ISE_REST_USERNAME') }}"
 ise_password: "{{ lookup('env','ISE_REST_PASSWORD') }}"
 ise_verify: "{{ lookup('env','ISE_VERIFY') | default(False, true) }}"
 ise_debug: "{{ lookup('env','ISE_DEBUG')  | default(False, true) }}"
-ise_ppan: iseadmin01.securitydemo.net
-ise_span: iseadmin02.securitydemo.net
+radius_secret: "{{ lookup('env','ISE_REST_PASSWORD') }}"
 repo_user: iseftp
 repo_password: "{{ lookup('env','ISE_REST_PASSWORD') }}"
 license_token: "{{ lookup('env','ISE_LIC_TOKEN') }}"

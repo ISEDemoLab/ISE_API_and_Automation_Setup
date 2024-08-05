@@ -1,0 +1,57 @@
+---
+- name: Create Network Device
+  gather_facts: false
+  hosts: ise33public
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  tasks:
+
+    - name: Create
+      cisco.ise.network_device:
+        ise_hostname: "{{ ansible_host }}"
+        ise_username: "{{ise_username}}"
+        ise_password: "{{ise_password}}"
+        ise_verify: "{{ise_verify}}"
+        state: present
+        name: Ansible_test
+        description: Created by Ansible
+        NetworkDeviceIPList:
+        - ipaddress: 10.10.10.15
+          mask: 32
+        profileName: "Cisco"
+        authenticationSettings:
+          dtlsRequired: false
+          enableKeyWrap: false
+          enableMultiSecret: "false"
+          keyEncryptionKey: ""
+          keyInputFormat: "ASCII"
+          messageAuthenticatorCodeKey: ""
+          radiusSharedSecret: "radius_secret"
+        coaPort: 0
+      register: device
+
+  post_tasks:
+
+    - name: Show Device Information
+      ansible.builtin.debug:
+        var: device
+      ignore_errors: true
+
+    - name: Network Device was Created Successfully
+      when: 
+        - device is defined
+        - device.failed == false
+      ansible.builtin.pause:
+        seconds: 2
+        prompt: |
+          ┃  
+          ┃        .
+          ┃       /|\                                          Network Device:  {{ device.ise_response.name }}
+          ┃   @  /|||\  @      ___                _        _   IP address:      {{ device.ise_response.NetworkDeviceIPList[0].ipaddress }}/{{ device.ise_response.NetworkDeviceIPList[0].mask }}
+          ┃  @  /|||||\  @    | _ \ ___  __ _  __| | _  _ | |  Description:     {{ device.ise_response.description }}
+          ┃  @  \|/ \|/  @    |   // -_)/ _` |/ _` || || ||_|  
+          ┃   @.       .@     |_|_\\___|\__,_|\__,_| \_, |(_)
+          ┃    `Y@ @ @Y`                             |__/      Message:         {{ device.result }}
+          ┃  

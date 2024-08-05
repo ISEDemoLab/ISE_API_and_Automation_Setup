@@ -1,0 +1,18 @@
+---
+- name: Delete Network Devices
+  gather_facts: false
+  hosts: ise33public
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  tasks:
+
+    - name: Delete Network Device by name
+      cisco.ise.network_device:
+        ise_hostname: "{{ansible_host}}"
+        ise_username: "{{ise_username}}"
+        ise_password: "{{ise_password}}"
+        ise_verify: "{{ise_verify}}"
+        state: absent
+        name: Ansible_test

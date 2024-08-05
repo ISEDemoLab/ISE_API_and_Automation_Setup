@@ -1,0 +1,22 @@
+---
+- name: Get all Network Devices
+  gather_facts: false
+  hosts: ise33public
+  connection: local
+  vars_files:
+    - ../vars/main.yaml
+
+  tasks:
+
+    - name: Get Network Device by name
+      cisco.ise.network_device_info:
+        ise_hostname: "{{ansible_host}}"
+        ise_username: "{{ise_username}}"
+        ise_password: "{{ise_password}}"
+        ise_verify: "{{ise_verify}}"
+      register: result
+
+    - name: Show Device Information
+      ansible.builtin.debug:
+        var: result
+      ignore_errors: true
