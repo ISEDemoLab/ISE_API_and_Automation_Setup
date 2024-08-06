@@ -139,6 +139,7 @@ The modules for the environment shown above are
 |python 3.12|Informs the system which version of python to use in the vitrual environment (venv)|
 |ansible|Installs the most commonly used Ansible Community collections|
 |ciscoisesdk|Cisco Identity Services Engine (ISE) Platform SDK for Python|
+|paramiko|Python implementation of SSHv2|
 |jmespath|JSON parser for Python (allows Python to read and understand JavaScript Online Notation (JSON) files)|
 |passlib|Allows for `password_hash()` when creating users on linux.  macOS users may ned to use `brew install passlib`|
 |pipenv shell| Activates the virtual environment|

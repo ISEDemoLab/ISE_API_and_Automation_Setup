@@ -41,7 +41,7 @@ GET Network Device
 
 curl --include --insecure --location \
 --header 'Accept: application/json' \
---user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
+--user $ISE_GET_USERNAME:$ISE_REST_PASSWORD \
 --request GET https://ise33public.iselabs.net/ers/config/networkdevice
 
 ------------------------------------------------------------------------------------------------
@@ -50,7 +50,7 @@ GET Specific Network Device
 
 curl  --include  --insecure  --location \
 --header 'Accept: application/json' \
---user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
+--user $ISE_GET_USERNAME:$ISE_REST_PASSWORD \
 --request GET https://ise33public.iselabs.net/ers/config/networkdevice/<<device_id>>
 
 ------------------------------------------------------------------------------------------------
@@ -61,7 +61,7 @@ curl --include --insecure --location \
 --header 'Content-Type:application/json' \
 --header 'Accept: application/json' \
 --user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
---request PUT <<device_id>> \
+--request PUT https://ise33public.iselabs.net/ers/config/networkdevice/<<device_id>> \
 --data '
 {
   "NetworkDevice": {
@@ -98,7 +98,7 @@ curl  --include  --insecure  --location \
 --header 'Content-Type:application/json' \
 --header 'Accept: application/json' \
 --user $ISE_REST_USERNAME:$ISE_REST_PASSWORD \
---request PATCH https://ise33public.iselabs.neters/config/networkdevice/<<device_id>> \
+--request PATCH https://ise33public.iselabs.net/ers/config/<<device_id>> \
 --data '
 {
   "NetworkDevice" : {

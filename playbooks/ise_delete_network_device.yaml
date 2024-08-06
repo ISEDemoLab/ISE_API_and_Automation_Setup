@@ -15,4 +15,4 @@
         ise_password: "{{ise_password}}"
         ise_verify: "{{ise_verify}}"
         state: absent
-        name: Ansible_test
+        name: "Ansible_test"
